@@ -1,5 +1,7 @@
 package com.example.mlimi365.ui.screens
 
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -32,7 +34,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun SplashScreen() {
+fun SplashScreen(
+    onFinished: () -> Unit
+) {
+    LaunchedEffect(Unit) {
+        delay(2000)
+        onFinished()
+    }
     // Colors extracted from your HTML
     val bgColor = Color(0xFFFAFBF9)
     val titleColor = Color(0xFF153E26)
@@ -299,5 +307,5 @@ fun SplashScreen() {
 @Preview(showBackground = true, device = "id:pixel_5")
 @Composable
 fun SplashScreenPreview() {
-    SplashScreen()
+    SplashScreen(  onFinished = {})
 }

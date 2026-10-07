@@ -153,40 +153,35 @@ fun CropDetailScreen(
 
             GuideSection(
                 title = "1. Planting Guide",
-                content = crop.plantingGuide,
-                icon = "🌱"
+                content = crop.plantingGuide
             )
 
             Spacer(modifier = Modifier.height(14.dp))
 
             GuideSection(
                 title = "2. Spacing & Plant Population",
-                content = crop.spacing,
-                icon = "📏"
+                content = crop.spacing
             )
 
             Spacer(modifier = Modifier.height(14.dp))
 
             GuideSection(
                 title = "3. Fertilizer Application",
-                content = crop.fertilizer,
-                icon = "🧪"
+                content = crop.fertilizer
             )
 
             Spacer(modifier = Modifier.height(14.dp))
 
             GuideSection(
                 title = "4. Weeding Schedule",
-                content = crop.weeding,
-                icon = "🌿"
+                content = crop.weeding
             )
 
             Spacer(modifier = Modifier.height(14.dp))
 
             GuideSection(
                 title = "5. Harvesting & Storage",
-                content = crop.harvesting,
-                icon = "🌾"
+                content = crop.harvesting
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -197,8 +192,7 @@ fun CropDetailScreen(
 @Composable
 private fun GuideSection(
     title: String,
-    content: String,
-    icon: String
+    content: String
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -211,23 +205,12 @@ private fun GuideSection(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = icon,
-                    fontSize = 20.sp
-                )
-
-                Spacer(modifier = Modifier.width(10.dp))
-
-                Text(
-                    text = title,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = DarkText
-                )
-            }
+            Text(
+                text = title,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = DarkText
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 

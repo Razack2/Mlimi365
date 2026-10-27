@@ -220,26 +220,34 @@ private fun MonthCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                month.suitableCrops.forEach { crop ->
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                color = Color(0xFFF1F5F9),
-                                shape = RoundedCornerShape(6.dp)
+            if (month.suitableCrops.isEmpty()) {
+                Text(
+                    text = "No specific crops associated for this period",
+                    fontSize = 11.sp,
+                    color = MutedText
+                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    month.suitableCrops.forEach { crop ->
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    color = Color(0xFFF1F5F9),
+                                    shape = RoundedCornerShape(6.dp)
+                                )
+                                .clickable { onCropClick(crop) }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = crop,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF334155)
                             )
-                            .clickable { onCropClick(crop) }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = crop,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFF334155)
-                        )
+                        }
                     }
                 }
             }

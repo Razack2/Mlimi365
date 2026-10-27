@@ -173,7 +173,8 @@ fun OnboardingScreen(
             Text(
                 text = if (pagerState.currentPage == onboardingPages.size - 1) "Get Started" else "Next",
                 fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White
             )
         }
 

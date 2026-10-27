@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -64,6 +66,40 @@ data class ReminderItem(
     val isCompleted: Boolean
 )
 
+private fun saveRemindersToPrefs(context: Context, reminders: List<ReminderItem>) {
+    val prefs = context.getSharedPreferences("mlimi365_reminders_prefs", Context.MODE_PRIVATE)
+    val set = reminders.map { "${it.id}:::${it.title}:::${it.dateText}:::${it.isCompleted}" }.toSet()
+    prefs.edit().putStringSet("reminder_items", set).apply()
+}
+
+private fun loadRemindersFromPrefs(context: Context): List<ReminderItem> {
+    val prefs = context.getSharedPreferences("mlimi365_reminders_prefs", Context.MODE_PRIVATE)
+    val set = prefs.getStringSet("reminder_items", null)
+    if (set == null) {
+        val defaults = listOf(
+            ReminderItem("1", "Prepare land for planting", "Today, 10 Apr", false),
+            ReminderItem("2", "Check for weeds", "In 3 days, 13 Apr", false),
+            ReminderItem("3", "Apply fertilizer", "In 7 days, 17 Apr", false),
+            ReminderItem("4", "Monitor for pests", "In 10 days, 20 Apr", false),
+            ReminderItem("5", "First weeding", "In 14 days, 24 Apr", false),
+            ReminderItem("6", "Clear post-harvest residues", "Completed last month", true)
+        )
+        saveRemindersToPrefs(context, defaults)
+        return defaults
+    }
+    return set.mapNotNull { itemStr ->
+        val parts = itemStr.split(":::")
+        if (parts.size == 4) {
+            ReminderItem(
+                id = parts[0],
+                title = parts[1],
+                dateText = parts[2],
+                isCompleted = parts[3].toBoolean()
+            )
+        } else null
+    }
+}
+
 @Composable
 fun RemindersScreen(
     onHomeClick: () -> Unit = {},
@@ -71,50 +107,12 @@ fun RemindersScreen(
     onSearchClick: () -> Unit = {}
 ) {
     var selectedTab by remember { mutableStateOf(0) }
+    val context = LocalContext.current
 
-    /*
-     * Unlike the old listOf(...), mutableStateListOf(...)
-     * allows us to add, edit and remove reminders.
-     */
     val reminders = remember {
-        mutableStateListOf(
-            ReminderItem(
-                "1",
-                "Prepare land for planting",
-                "Today, 10 Apr",
-                false
-            ),
-            ReminderItem(
-                "2",
-                "Check for weeds",
-                "In 3 days, 13 Apr",
-                false
-            ),
-            ReminderItem(
-                "3",
-                "Apply fertilizer",
-                "In 7 days, 17 Apr",
-                false
-            ),
-            ReminderItem(
-                "4",
-                "Monitor for pests",
-                "In 10 days, 20 Apr",
-                false
-            ),
-            ReminderItem(
-                "5",
-                "First weeding",
-                "In 14 days, 24 Apr",
-                false
-            ),
-            ReminderItem(
-                "6",
-                "Clear post-harvest residues",
-                "Completed last month",
-                true
-            )
-        )
+        mutableStateListOf<ReminderItem>().apply {
+            addAll(loadRemindersFromPrefs(context))
+        }
     }
 
     var showAddDialog by remember { mutableStateOf(false) }
@@ -134,10 +132,6 @@ fun RemindersScreen(
             .background(Color(0xFFFAFCFA))
             .statusBarsPadding()
     ) {
-
-        // ---------------------------------------------------------
-        // HEADER
-        // ---------------------------------------------------------
 
         Column(
             modifier = Modifier
@@ -186,10 +180,6 @@ fun RemindersScreen(
             }
         }
 
-        // ---------------------------------------------------------
-        // REMINDER LIST
-        // ---------------------------------------------------------
-
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
@@ -237,10 +227,6 @@ fun RemindersScreen(
             }
         }
 
-        // ---------------------------------------------------------
-        // ADD REMINDER BUTTON
-        // ---------------------------------------------------------
-
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -281,9 +267,6 @@ fun RemindersScreen(
             }
         }
 
-        // ---------------------------------------------------------
-        // BOTTOM NAVIGATION
-        // ---------------------------------------------------------
 
         RemindersBottomNavigation(
             onHomeClick = onHomeClick,
@@ -292,10 +275,6 @@ fun RemindersScreen(
             onReminderClick = {}
         )
     }
-
-    // -------------------------------------------------------------
-    // ADD REMINDER DIALOG
-    // -------------------------------------------------------------
 
     if (showAddDialog) {
 
@@ -319,6 +298,7 @@ fun RemindersScreen(
                 )
 
                 reminders.add(newReminder)
+                saveRemindersToPrefs(context, reminders)
 
                 showAddDialog = false
                 selectedTab = 0
@@ -326,9 +306,6 @@ fun RemindersScreen(
         )
     }
 
-    // -------------------------------------------------------------
-    // EDIT REMINDER DIALOG
-    // -------------------------------------------------------------
 
     selectedReminder?.let { reminder ->
 
@@ -347,6 +324,7 @@ fun RemindersScreen(
 
                 if (index != -1) {
                     reminders[index] = updatedReminder
+                    saveRemindersToPrefs(context, reminders)
                 }
 
                 selectedReminder = null
@@ -357,6 +335,7 @@ fun RemindersScreen(
                 reminders.removeAll {
                     it.id == reminder.id
                 }
+                saveRemindersToPrefs(context, reminders)
 
                 selectedReminder = null
             },
@@ -372,6 +351,7 @@ fun RemindersScreen(
                     reminders[index] = reminder.copy(
                         isCompleted = !reminder.isCompleted
                     )
+                    saveRemindersToPrefs(context, reminders)
                 }
 
                 selectedReminder = null
@@ -380,10 +360,6 @@ fun RemindersScreen(
     }
 }
 
-
-// =================================================================
-// REMINDER CARD
-// =================================================================
 
 @Composable
 private fun ReminderCard(
@@ -469,10 +445,6 @@ private fun ReminderCard(
     }
 }
 
-
-// =================================================================
-// ADD REMINDER DIALOG
-// =================================================================
 
 @Composable
 private fun ReminderDialog(
@@ -561,7 +533,10 @@ private fun ReminderDialog(
                     containerColor = HomeGreen
                 )
             ) {
-                Text(saveButtonText)
+                Text(
+                    text = saveButtonText,
+                    color = Color.White
+                )
             }
         },
 
@@ -576,10 +551,6 @@ private fun ReminderDialog(
     )
 }
 
-
-// =================================================================
-// EDIT REMINDER DIALOG
-// =================================================================
 
 @Composable
 private fun ReminderEditDialog(
@@ -717,7 +688,10 @@ private fun ReminderEditDialog(
                     containerColor = HomeGreen
                 )
             ) {
-                Text("Save Changes")
+                Text(
+                    text = "Save Changes",
+                    color = Color.White
+                )
             }
         },
 
@@ -731,11 +705,6 @@ private fun ReminderEditDialog(
         }
     )
 }
-
-
-// =================================================================
-// TAB BUTTON
-// =================================================================
 
 @Composable
 private fun TabButton(
@@ -774,11 +743,6 @@ private fun TabButton(
         )
     }
 }
-
-
-// =================================================================
-// BOTTOM NAVIGATION
-// =================================================================
 
 @Composable
 private fun RemindersBottomNavigation(
@@ -831,10 +795,6 @@ private fun RemindersBottomNavigation(
     }
 }
 
-
-// =================================================================
-// NAVIGATION ITEM
-// =================================================================
 
 @Composable
 private fun NavigationItem(

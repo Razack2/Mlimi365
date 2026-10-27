@@ -117,7 +117,8 @@ fun HomeScreen(
                 Text(
                     text = "View Crop Guides",
                     fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
                 )
             }
 

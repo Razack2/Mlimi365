@@ -31,8 +31,8 @@ The application shall meet the following non-functional requirements:
 
 ##  UI Implementation Status
 - [x] Splash Screen (Implemented using Jetpack Compose Canvas for custom vector graphics)
-- [ ] Farming Calendar Screen
-- [ ] Crop Details Screen
-- [ ] Search Screen
-- [ ] Reminders / Notifications
+- [x] Farming Calendar Screen
+- [x] Crop Details Screen
+- [x] Search Screen
+- [x] Reminders / Notifications
 

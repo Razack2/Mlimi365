@@ -80,13 +80,27 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Recommended crops
-            Text(
-                text = "Recommended Crops",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = DarkText
-            )
+            // Recommended crops header with View All button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Recommended Crops",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = DarkText
+                )
+
+                Text(
+                    text = "View All",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = HomeGreen,
+                    modifier = Modifier.clickable { onCropGuidesClick() }
+                )
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 

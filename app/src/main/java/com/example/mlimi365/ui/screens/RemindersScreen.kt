@@ -1,5 +1,8 @@
 package com.example.mlimi365.ui.screens
 
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -66,24 +69,41 @@ data class ReminderItem(
     val isCompleted: Boolean
 )
 
+private fun generateDefaultReminders(): List<ReminderItem> {
+    val dateFormat = SimpleDateFormat("d MMM", Locale.getDefault())
+
+    fun getDateString(daysOffset: Int): String {
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.DAY_OF_YEAR, daysOffset)
+        val formattedDate = dateFormat.format(calendar.time)
+        return when (daysOffset) {
+            0 -> "Today, $formattedDate"
+            1 -> "Tomorrow, $formattedDate"
+            else -> "In $daysOffset days, $formattedDate"
+        }
+    }
+
+    return listOf(
+        ReminderItem("1", "Prepare land for planting", getDateString(0), false),
+        ReminderItem("2", "Check for weeds", getDateString(3), false),
+        ReminderItem("3", "Apply fertilizer", getDateString(7), false),
+        ReminderItem("4", "Monitor for pests", getDateString(10), false),
+        ReminderItem("5", "First weeding", getDateString(14), false),
+        ReminderItem("6", "Clear post-harvest residues", "Completed recently", true)
+    )
+}
+
 private fun saveRemindersToPrefs(context: Context, reminders: List<ReminderItem>) {
     val prefs = context.getSharedPreferences("mlimi365_reminders_prefs", Context.MODE_PRIVATE)
     val set = reminders.map { "${it.id}:::${it.title}:::${it.dateText}:::${it.isCompleted}" }.toSet()
-    prefs.edit().putStringSet("reminder_items", set).apply()
+    prefs.edit().putStringSet("reminder_items_v2", set).apply()
 }
 
 private fun loadRemindersFromPrefs(context: Context): List<ReminderItem> {
     val prefs = context.getSharedPreferences("mlimi365_reminders_prefs", Context.MODE_PRIVATE)
-    val set = prefs.getStringSet("reminder_items", null)
+    val set = prefs.getStringSet("reminder_items_v2", null)
     if (set == null) {
-        val defaults = listOf(
-            ReminderItem("1", "Prepare land for planting", "Today, 10 Apr", false),
-            ReminderItem("2", "Check for weeds", "In 3 days, 13 Apr", false),
-            ReminderItem("3", "Apply fertilizer", "In 7 days, 17 Apr", false),
-            ReminderItem("4", "Monitor for pests", "In 10 days, 20 Apr", false),
-            ReminderItem("5", "First weeding", "In 14 days, 24 Apr", false),
-            ReminderItem("6", "Clear post-harvest residues", "Completed last month", true)
-        )
+        val defaults = generateDefaultReminders()
         saveRemindersToPrefs(context, defaults)
         return defaults
     }

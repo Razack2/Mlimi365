@@ -89,6 +89,7 @@ fun AppNavigation() {
         // SEARCH SCREEN (Search crops & guides offline)
         composable("search") {
             SearchScreen(
+                onBack = { navController.popBackStack() },
                 onHomeClick = {
                     navController.navigate("home") {
                         popUpTo("home") { inclusive = true }

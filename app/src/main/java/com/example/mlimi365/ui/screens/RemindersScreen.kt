@@ -1,5 +1,18 @@
 package com.example.mlimi365.ui.screens
 
+import android.Manifest
+import com.example.mlimi365.R
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import androidx.compose.runtime.LaunchedEffect
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -31,7 +44,6 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
-import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -97,6 +109,7 @@ private fun saveRemindersToPrefs(context: Context, reminders: List<ReminderItem>
     val prefs = context.getSharedPreferences("mlimi365_reminders_prefs", Context.MODE_PRIVATE)
     val set = reminders.map { "${it.id}:::${it.title}:::${it.dateText}:::${it.isCompleted}" }.toSet()
     prefs.edit().putStringSet("reminder_items_v2", set).apply()
+    com.example.mlimi365.model.FirebaseReminderRepository.syncAllRemindersToRemote(reminders)
 }
 
 private fun loadRemindersFromPrefs(context: Context): List<ReminderItem> {
@@ -120,6 +133,63 @@ private fun loadRemindersFromPrefs(context: Context): List<ReminderItem> {
     }
 }
 
+private const val CHANNEL_ID = "mlimi365_reminders_channel"
+
+private fun checkAndSendDailyNotification(context: Context) {
+    val reminders = loadRemindersFromPrefs(context)
+    val todayReminder = reminders.firstOrNull { !it.isCompleted && it.dateText.contains("Today", ignoreCase = true) }
+        ?: reminders.firstOrNull { !it.isCompleted }
+
+    if (todayReminder != null) {
+        showReminderNotification(
+            context,
+            "Today's Farming Reminder",
+            "${todayReminder.title} (${todayReminder.dateText})"
+        )
+    }
+}
+
+private fun showReminderNotification(context: Context, title: String, message: String) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val name = "Farming Reminders"
+        val descriptionText = "Notifications for seasonal farming activities"
+        val importance = NotificationManager.IMPORTANCE_HIGH
+        val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
+            description = descriptionText
+            enableVibration(true)
+        }
+        val notificationManager: NotificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(channel)
+    }
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+    }
+
+    val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+        .setSmallIcon(R.drawable.ic_launcher_foreground)
+        .setContentTitle(title)
+        .setContentText(message)
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setDefaults(NotificationCompat.DEFAULT_ALL)
+        .setAutoCancel(true)
+
+    try {
+        with(NotificationManagerCompat.from(context)) {
+            notify(System.currentTimeMillis().toInt(), builder.build())
+        }
+    } catch (e: SecurityException) {
+        e.printStackTrace()
+    }
+}
+
 @Composable
 fun RemindersScreen(
     onHomeClick: () -> Unit = {},
@@ -128,6 +198,30 @@ fun RemindersScreen(
 ) {
     var selectedTab by remember { mutableStateOf(0) }
     val context = LocalContext.current
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            checkAndSendDailyNotification(context)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                checkAndSendDailyNotification(context)
+            } else {
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        } else {
+            checkAndSendDailyNotification(context)
+        }
+    }
 
     val reminders = remember {
         mutableStateListOf<ReminderItem>().apply {
@@ -352,6 +446,7 @@ fun RemindersScreen(
 
             onDelete = {
 
+                com.example.mlimi365.model.FirebaseReminderRepository.deleteReminderFromRemote(reminder.id)
                 reminders.removeAll {
                     it.id == reminder.id
                 }

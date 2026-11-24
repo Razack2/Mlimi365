@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -23,11 +24,14 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import com.example.mlimi365.model.FirebaseAuthRepository
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -50,6 +54,7 @@ fun HomeScreen(
     onSearchClick: () -> Unit = {},
     onReminderClick: () -> Unit = {},
     onCropGuidesClick: () -> Unit = {},
+    onAccountClick: () -> Unit = {},
     onCropClick: (String) -> Unit = {}
 ) {
     Column(
@@ -69,7 +74,7 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Greeting
-            GreetingHeader()
+            GreetingHeader(onAccountClick = onAccountClick)
 
             Spacer(modifier = Modifier.height(18.dp))
 
@@ -150,7 +155,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun GreetingHeader() {
+private fun GreetingHeader(onAccountClick: () -> Unit = {}) {
     val (greetingText, weatherEmoji) = remember {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         when (hour) {
@@ -161,10 +166,15 @@ private fun GreetingHeader() {
         }
     }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val userName = remember {
+        FirebaseAuthRepository.getDisplayName(context).ifBlank { "Farmer" }
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Top
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Column {
             Text(
@@ -175,17 +185,37 @@ private fun GreetingHeader() {
             )
 
             Text(
-                text = "Farmer!",
+                text = "$userName!",
                 fontSize = 26.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = Color(0xFF111827)
             )
         }
 
-        Text(
-            text = weatherEmoji,
-            fontSize = 30.sp
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = weatherEmoji,
+                fontSize = 26.sp
+            )
+
+            IconButton(onClick = onAccountClick) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(Color(0xFFEDF6F0), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "My Account",
+                        tint = HomeGreen
+                    )
+                }
+            }
+        }
     }
 }
 

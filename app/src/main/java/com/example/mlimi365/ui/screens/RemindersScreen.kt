@@ -1,26 +1,20 @@
 package com.example.mlimi365.ui.screens
 
 import android.Manifest
-import com.example.mlimi365.R
-import android.app.NotificationChannel
-import android.app.NotificationManager
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
-import androidx.compose.runtime.LaunchedEffect
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Locale
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,27 +31,27 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,9 +60,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import com.example.mlimi365.model.FirebaseReminderRepository
+import com.example.mlimi365.utils.ReminderScheduler
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 private val HomeGreen = Color(0xFF205338)
 private val DarkText = Color(0xFF111827)
@@ -78,116 +79,105 @@ data class ReminderItem(
     val id: String,
     val title: String,
     val dateText: String,
-    val isCompleted: Boolean
+    val isCompleted: Boolean,
+    val timestampMillis: Long = 0L,
 )
 
 private fun generateDefaultReminders(): List<ReminderItem> {
-    val dateFormat = SimpleDateFormat("d MMM", Locale.getDefault())
+    val fullDateFormat = SimpleDateFormat("d MMM yyyy, hh:mm a", Locale.getDefault())
 
-    fun getDateString(daysOffset: Int): String {
+    fun getReminderData(daysOffset: Int, hour: Int = 9): Pair<String, Long> {
         val calendar = Calendar.getInstance()
         calendar.add(Calendar.DAY_OF_YEAR, daysOffset)
-        val formattedDate = dateFormat.format(calendar.time)
-        return when (daysOffset) {
-            0 -> "Today, $formattedDate"
-            1 -> "Tomorrow, $formattedDate"
-            else -> "In $daysOffset days, $formattedDate"
-        }
+        calendar.set(Calendar.HOUR_OF_DAY, hour)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        return Pair(fullDateFormat.format(calendar.time), calendar.timeInMillis)
     }
 
+    val (date0, ts0) = getReminderData(0, 10)
+    val (date3, ts3) = getReminderData(3)
+    val (date7, ts7) = getReminderData(7)
+    val (date10, ts10) = getReminderData(10)
+    val (date14, ts14) = getReminderData(14)
+
     return listOf(
-        ReminderItem("1", "Prepare land for planting", getDateString(0), false),
-        ReminderItem("2", "Check for weeds", getDateString(3), false),
-        ReminderItem("3", "Apply fertilizer", getDateString(7), false),
-        ReminderItem("4", "Monitor for pests", getDateString(10), false),
-        ReminderItem("5", "First weeding", getDateString(14), false),
-        ReminderItem("6", "Clear post-harvest residues", "Completed recently", true)
+        ReminderItem("1", "Prepare land for planting", date0, false, ts0),
+        ReminderItem("2", "Check for weeds", date3, false, ts3),
+        ReminderItem("3", "Apply fertilizer", date7, false, ts7),
+        ReminderItem("4", "Monitor for pests", date10, false, ts10),
+        ReminderItem("5", "First weeding", date14, false, ts14),
+        ReminderItem("6", "Clear post-harvest residues", "Completed recently", true, 0L)
     )
 }
 
 private fun saveRemindersToPrefs(context: Context, reminders: List<ReminderItem>) {
     val prefs = context.getSharedPreferences("mlimi365_reminders_prefs", Context.MODE_PRIVATE)
-    val set = reminders.map { "${it.id}:::${it.title}:::${it.dateText}:::${it.isCompleted}" }.toSet()
+    val set = reminders.map { "${it.id}:::${it.title}:::${it.dateText}:::${it.isCompleted}:::${it.timestampMillis}" }.toSet()
     prefs.edit().putStringSet("reminder_items_v2", set).apply()
-    com.example.mlimi365.model.FirebaseReminderRepository.syncAllRemindersToRemote(reminders)
+
+    // Persist to local Room SQLite database for complete offline support and WorkManager
+    try {
+        val db = com.example.mlimi365.db.MlimiDatabase.getInstance(context)
+        val currentEntities = db.reminderDao().getAllReminders()
+        val newIds = reminders.map { it.id }.toSet()
+        currentEntities.filter { it.id !in newIds }.forEach { db.reminderDao().deleteReminder(it) }
+        reminders.forEach { item ->
+            db.reminderDao().insertReminder(
+                com.example.mlimi365.db.ReminderEntity(
+                    id = item.id,
+                    title = item.title,
+                    dateText = item.dateText,
+                    isCompleted = item.isCompleted,
+                    timestampMillis = item.timestampMillis
+                )
+            )
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+
+    FirebaseReminderRepository.syncAllRemindersToRemote(reminders)
 }
 
 private fun loadRemindersFromPrefs(context: Context): List<ReminderItem> {
     val prefs = context.getSharedPreferences("mlimi365_reminders_prefs", Context.MODE_PRIVATE)
     val set = prefs.getStringSet("reminder_items_v2", null)
-    if (set == null) {
-        val defaults = generateDefaultReminders()
-        saveRemindersToPrefs(context, defaults)
-        return defaults
-    }
-    return set.mapNotNull { itemStr ->
-        val parts = itemStr.split(":::")
-        if (parts.size == 4) {
-            ReminderItem(
-                id = parts[0],
-                title = parts[1],
-                dateText = parts[2],
-                isCompleted = parts[3].toBoolean()
-            )
-        } else null
-    }
-}
-
-private const val CHANNEL_ID = "mlimi365_reminders_channel"
-
-private fun checkAndSendDailyNotification(context: Context) {
-    val reminders = loadRemindersFromPrefs(context)
-    val todayReminder = reminders.firstOrNull { !it.isCompleted && it.dateText.contains("Today", ignoreCase = true) }
-        ?: reminders.firstOrNull { !it.isCompleted }
-
-    if (todayReminder != null) {
-        showReminderNotification(
-            context,
-            "Today's Farming Reminder",
-            "${todayReminder.title} (${todayReminder.dateText})"
-        )
-    }
-}
-
-private fun showReminderNotification(context: Context, title: String, message: String) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        val name = "Farming Reminders"
-        val descriptionText = "Notifications for seasonal farming activities"
-        val importance = NotificationManager.IMPORTANCE_HIGH
-        val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
-            description = descriptionText
-            enableVibration(true)
+    if (set != null) {
+        val list = set.mapNotNull { itemStr ->
+            val parts = itemStr.split(":::")
+            if (parts.size >= 4) {
+                ReminderItem(
+                    id = parts[0],
+                    title = parts[1],
+                    dateText = parts[2],
+                    isCompleted = parts[3].toBoolean(),
+                    timestampMillis = parts.getOrNull(4)?.toLongOrNull() ?: 0L
+                )
+            } else null
         }
-        val notificationManager: NotificationManager =
-            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.createNotificationChannel(channel)
+        if (list.isNotEmpty()) return list
     }
 
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        if (ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            return
-        }
-    }
-
-    val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-        .setSmallIcon(R.drawable.ic_launcher_foreground)
-        .setContentTitle(title)
-        .setContentText(message)
-        .setPriority(NotificationCompat.PRIORITY_HIGH)
-        .setDefaults(NotificationCompat.DEFAULT_ALL)
-        .setAutoCancel(true)
-
+    // Fallback to local Room database if SharedPreferences was empty
     try {
-        with(NotificationManagerCompat.from(context)) {
-            notify(System.currentTimeMillis().toInt(), builder.build())
+        val db = com.example.mlimi365.db.MlimiDatabase.getInstance(context)
+        val roomReminders = db.reminderDao().getAllReminders()
+        if (roomReminders.isNotEmpty()) {
+            val list = roomReminders.map {
+                ReminderItem(it.id, it.title, it.dateText, it.isCompleted, it.timestampMillis)
+            }
+            saveRemindersToPrefs(context, list)
+            return list
         }
-    } catch (e: SecurityException) {
+    } catch (e: Exception) {
         e.printStackTrace()
     }
+
+    val defaults = generateDefaultReminders()
+    saveRemindersToPrefs(context, defaults)
+    return defaults
 }
 
 @Composable
@@ -203,7 +193,7 @@ fun RemindersScreen(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            checkAndSendDailyNotification(context)
+            ReminderScheduler.rescheduleAllReminders(context)
         }
     }
 
@@ -214,12 +204,12 @@ fun RemindersScreen(
                     Manifest.permission.POST_NOTIFICATIONS
                 ) == PackageManager.PERMISSION_GRANTED
             ) {
-                checkAndSendDailyNotification(context)
+                ReminderScheduler.rescheduleAllReminders(context)
             } else {
                 permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         } else {
-            checkAndSendDailyNotification(context)
+            ReminderScheduler.rescheduleAllReminders(context)
         }
     }
 
@@ -359,14 +349,14 @@ fun RemindersScreen(
                     .height(52.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = HomeGreen
+                    containerColor = HomeGreen,
+                    contentColor = Color.White
                 )
             ) {
 
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = "Add reminder",
-                    tint = Color.White,
                     modifier = Modifier.size(20.dp)
                 )
 
@@ -375,8 +365,7 @@ fun RemindersScreen(
                 Text(
                     text = "Add Reminder",
                     fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
@@ -391,28 +380,22 @@ fun RemindersScreen(
     }
 
     if (showAddDialog) {
-
         ReminderDialog(
-            dialogTitle = "Add Reminder",
-            initialTitle = "",
-            initialDate = "",
-            saveButtonText = "Add Reminder",
-
             onDismiss = {
                 showAddDialog = false
             },
-
-            onSave = { title, date ->
-
+            onSave = { title, dateText, timestampMillis ->
                 val newReminder = ReminderItem(
                     id = System.currentTimeMillis().toString(),
                     title = title,
-                    dateText = date,
-                    isCompleted = false
+                    dateText = dateText,
+                    isCompleted = false,
+                    timestampMillis = timestampMillis
                 )
 
                 reminders.add(newReminder)
                 saveRemindersToPrefs(context, reminders)
+                ReminderScheduler.scheduleReminder(context, newReminder)
 
                 showAddDialog = false
                 selectedTab = 0
@@ -420,33 +403,31 @@ fun RemindersScreen(
         )
     }
 
-
     selectedReminder?.let { reminder ->
-
         ReminderEditDialog(
             reminder = reminder,
-
             onDismiss = {
                 selectedReminder = null
             },
-
             onSave = { updatedReminder ->
-
                 val index = reminders.indexOfFirst {
                     it.id == updatedReminder.id
                 }
 
                 if (index != -1) {
+                    ReminderScheduler.cancelReminder(context, reminder.id)
                     reminders[index] = updatedReminder
                     saveRemindersToPrefs(context, reminders)
+                    if (!updatedReminder.isCompleted && (updatedReminder.timestampMillis > System.currentTimeMillis())) {
+                        ReminderScheduler.scheduleReminder(context, updatedReminder)
+                    }
                 }
 
                 selectedReminder = null
             },
-
             onDelete = {
-
-                com.example.mlimi365.model.FirebaseReminderRepository.deleteReminderFromRemote(reminder.id)
+                ReminderScheduler.cancelReminder(context, reminder.id)
+                FirebaseReminderRepository.deleteReminderFromRemote(reminder.id)
                 reminders.removeAll {
                     it.id == reminder.id
                 }
@@ -454,19 +435,21 @@ fun RemindersScreen(
 
                 selectedReminder = null
             },
-
             onToggleComplete = {
-
                 val index = reminders.indexOfFirst {
                     it.id == reminder.id
                 }
 
                 if (index != -1) {
-
-                    reminders[index] = reminder.copy(
-                        isCompleted = !reminder.isCompleted
-                    )
+                    val updatedCompleted = !reminder.isCompleted
+                    val updatedReminder = reminder.copy(isCompleted = updatedCompleted)
+                    reminders[index] = updatedReminder
                     saveRemindersToPrefs(context, reminders)
+                    if (updatedCompleted) {
+                        ReminderScheduler.cancelReminder(context, reminder.id)
+                    } else if (updatedReminder.timestampMillis > System.currentTimeMillis()) {
+                        ReminderScheduler.scheduleReminder(context, updatedReminder)
+                    }
                 }
 
                 selectedReminder = null
@@ -475,13 +458,11 @@ fun RemindersScreen(
     }
 }
 
-
 @Composable
 private fun ReminderCard(
     reminder: ReminderItem,
     onClick: () -> Unit
 ) {
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -560,112 +541,199 @@ private fun ReminderCard(
     }
 }
 
-
 @Composable
 private fun ReminderDialog(
-    dialogTitle: String,
-    initialTitle: String,
-    initialDate: String,
-    saveButtonText: String,
     onDismiss: () -> Unit,
-    onSave: (String, String) -> Unit
+    onSave: (title: String, dateText: String, timestampMillis: Long) -> Unit
 ) {
+    val context = LocalContext.current
+    var title by remember { mutableStateOf("") }
 
-    var title by remember {
-        mutableStateOf(initialTitle)
+    val calendar = remember {
+        Calendar.getInstance().apply {
+            timeInMillis = System.currentTimeMillis()
+        }
     }
 
-    var date by remember {
-        mutableStateOf(initialDate)
+    var selectedTimeInMillis by remember { mutableLongStateOf(calendar.timeInMillis) }
+
+    val dateFormat = remember { SimpleDateFormat("d MMM yyyy", Locale.getDefault()) }
+    val timeFormat = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
+    val fullDateFormat = remember { SimpleDateFormat("d MMM yyyy, hh:mm a", Locale.getDefault()) }
+
+    var formattedDateText by remember {
+        mutableStateOf(fullDateFormat.format(calendar.time))
+    }
+
+    fun updateDateTime() {
+        selectedTimeInMillis = calendar.timeInMillis
+        formattedDateText = fullDateFormat.format(calendar.time)
+    }
+
+    val datePickerDialog = remember {
+        DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                calendar.set(year, month, dayOfMonth)
+                updateDateTime()
+            },
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH),
+            calendar.get(Calendar.DAY_OF_MONTH)
+        )
+    }
+
+    val timePickerDialog = remember {
+        TimePickerDialog(
+            context,
+            { _, hourOfDay, minute ->
+                calendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
+                calendar.set(Calendar.MINUTE, minute)
+                calendar.set(Calendar.SECOND, 0)
+                calendar.set(Calendar.MILLISECOND, 0)
+                updateDateTime()
+            },
+            calendar.get(Calendar.HOUR_OF_DAY),
+            calendar.get(Calendar.MINUTE),
+            false
+        )
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-
+        containerColor = Color.White,
+        titleContentColor = DarkText,
+        textContentColor = DarkText,
         title = {
             Text(
-                text = dialogTitle,
-                fontWeight = FontWeight.Bold
+                text = "Add Reminder",
+                fontWeight = FontWeight.Bold,
+                color = DarkText
             )
         },
-
         text = {
-
             Column {
-
                 OutlinedTextField(
                     value = title,
-                    onValueChange = {
-                        title = it
-                    },
+                    onValueChange = { title = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = {
-                        Text("Reminder")
-                    },
-                    placeholder = {
-                        Text("e.g. Apply fertilizer")
-                    },
-                    singleLine = true
+                    label = { Text("Reminder Title") },
+                    placeholder = { Text("e.g. Apply fertilizer") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = DarkText,
+                        unfocusedTextColor = DarkText,
+                        focusedBorderColor = HomeGreen,
+                        unfocusedBorderColor = Color(0xFFCBD5E1),
+                        focusedLabelColor = HomeGreen,
+                        unfocusedLabelColor = MutedText,
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White
+                    )
                 )
 
-                Spacer(
-                    modifier = Modifier.height(12.dp)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "Select Date & Time",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = DarkText
                 )
 
-                OutlinedTextField(
-                    value = date,
-                    onValueChange = {
-                        date = it
-                    },
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    label = {
-                        Text("Date / Time")
-                    },
-                    placeholder = {
-                        Text("e.g. Tomorrow, 10 Apr")
-                    },
-                    singleLine = true
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { datePickerDialog.show() },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, HomeGreen),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color.White,
+                            contentColor = DarkText
+                        ),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = "Select Date",
+                            tint = HomeGreen,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = dateFormat.format(calendar.time),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = DarkText,
+                            maxLines = 1
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = { timePickerDialog.show() },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, HomeGreen),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color.White,
+                            contentColor = DarkText
+                        ),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Notifications,
+                            contentDescription = "Select Time",
+                            tint = HomeGreen,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = timeFormat.format(calendar.time),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = DarkText,
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "Scheduled for: $formattedDateText",
+                    fontSize = 13.sp,
+                    color = HomeGreen,
+                    fontWeight = FontWeight.Bold
                 )
             }
         },
-
         confirmButton = {
-
             Button(
                 onClick = {
-
-                    if (
-                        title.isNotBlank() &&
-                        date.isNotBlank()
-                    ) {
-                        onSave(
-                            title.trim(),
-                            date.trim()
-                        )
+                    if (title.isNotBlank()) {
+                        onSave(title.trim(), formattedDateText, selectedTimeInMillis)
                     }
                 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = HomeGreen
+                    containerColor = HomeGreen,
+                    contentColor = Color.White
                 )
             ) {
-                Text(
-                    text = saveButtonText,
-                    color = Color.White
-                )
+                Text(text = "Add Reminder", fontWeight = FontWeight.Bold, color = Color.White)
             }
         },
-
         dismissButton = {
-
-            TextButton(
-                onClick = onDismiss
-            ) {
-                Text("Cancel")
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = HomeGreen, fontWeight = FontWeight.Bold)
             }
         }
     )
 }
-
 
 @Composable
 private fun ReminderEditDialog(
@@ -675,147 +743,263 @@ private fun ReminderEditDialog(
     onDelete: () -> Unit,
     onToggleComplete: () -> Unit
 ) {
+    val context = LocalContext.current
+    var title by remember(reminder.id) { mutableStateOf(reminder.title) }
 
-    var title by remember(
-        reminder.id
-    ) {
-        mutableStateOf(reminder.title)
+    val calendar = remember(reminder.id) {
+        Calendar.getInstance().apply {
+            if (reminder.timestampMillis > 0L) {
+                timeInMillis = reminder.timestampMillis
+            } else {
+                timeInMillis = System.currentTimeMillis()
+            }
+        }
     }
 
-    var date by remember(
-        reminder.id
-    ) {
-        mutableStateOf(reminder.dateText)
+    var selectedTimeInMillis by remember(reminder.id) { mutableLongStateOf(calendar.timeInMillis) }
+
+    val dateFormat = remember { SimpleDateFormat("d MMM yyyy", Locale.getDefault()) }
+    val timeFormat = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
+    val fullDateFormat = remember { SimpleDateFormat("d MMM yyyy, hh:mm a", Locale.getDefault()) }
+
+    var formattedDateText by remember(reminder.id) {
+        mutableStateOf(
+            if (reminder.dateText.isNotBlank() && reminder.timestampMillis <= 0L) {
+                reminder.dateText
+            } else {
+                fullDateFormat.format(calendar.time)
+            }
+        )
     }
+
+    fun updateDateTime() {
+        selectedTimeInMillis = calendar.timeInMillis
+        formattedDateText = fullDateFormat.format(calendar.time)
+    }
+
+    val datePickerDialog = remember(reminder.id) {
+        DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                calendar.set(year, month, dayOfMonth)
+                updateDateTime()
+            },
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH),
+            calendar.get(Calendar.DAY_OF_MONTH)
+        )
+    }
+
+    val timePickerDialog = remember(reminder.id) {
+        TimePickerDialog(
+            context,
+            { _, hourOfDay, minute ->
+                calendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
+                calendar.set(Calendar.MINUTE, minute)
+                calendar.set(Calendar.SECOND, 0)
+                calendar.set(Calendar.MILLISECOND, 0)
+                updateDateTime()
+            },
+            calendar.get(Calendar.HOUR_OF_DAY),
+            calendar.get(Calendar.MINUTE),
+            false
+        )
+    }
+
+    val redColor = Color(0xFFDC2626)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-
+        containerColor = Color.White,
+        titleContentColor = DarkText,
+        textContentColor = DarkText,
         title = {
-
             Text(
                 text = "Edit Reminder",
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = DarkText
             )
         },
-
         text = {
-
             Column {
-
                 OutlinedTextField(
                     value = title,
-                    onValueChange = {
-                        title = it
-                    },
+                    onValueChange = { title = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = {
-                        Text("Reminder")
-                    },
-                    singleLine = true
+                    label = { Text("Reminder Title") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = DarkText,
+                        unfocusedTextColor = DarkText,
+                        focusedBorderColor = HomeGreen,
+                        unfocusedBorderColor = Color(0xFFCBD5E1),
+                        focusedLabelColor = HomeGreen,
+                        unfocusedLabelColor = MutedText,
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White
+                    )
                 )
 
-                Spacer(
-                    modifier = Modifier.height(12.dp)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "Select Date & Time",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = DarkText
                 )
 
-                OutlinedTextField(
-                    value = date,
-                    onValueChange = {
-                        date = it
-                    },
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    label = {
-                        Text("Date / Time")
-                    },
-                    singleLine = true
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { datePickerDialog.show() },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, HomeGreen),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color.White,
+                            contentColor = DarkText
+                        ),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = "Select Date",
+                            tint = HomeGreen,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = dateFormat.format(calendar.time),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = DarkText,
+                            maxLines = 1
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = { timePickerDialog.show() },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, HomeGreen),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color.White,
+                            contentColor = DarkText
+                        ),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Notifications,
+                            contentDescription = "Select Time",
+                            tint = HomeGreen,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = timeFormat.format(calendar.time),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = DarkText,
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "Scheduled for: $formattedDateText",
+                    fontSize = 13.sp,
+                    color = HomeGreen,
+                    fontWeight = FontWeight.Bold
                 )
 
-                Spacer(
-                    modifier = Modifier.height(16.dp)
-                )
+                Spacer(modifier = Modifier.height(16.dp))
 
                 OutlinedButton(
                     onClick = onToggleComplete,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    border = BorderStroke(1.dp, HomeGreen),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color.White,
+                        contentColor = HomeGreen
+                    )
                 ) {
-
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
-                        contentDescription = null
+                        contentDescription = null,
+                        tint = HomeGreen
                     )
-
-                    Spacer(
-                        modifier = Modifier.width(8.dp)
-                    )
-
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = if (reminder.isCompleted) {
                             "Mark as Upcoming"
                         } else {
                             "Mark as Completed"
-                        }
+                        },
+                        color = HomeGreen,
+                        fontWeight = FontWeight.Bold
                     )
                 }
 
-                Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
+                Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedButton(
                     onClick = onDelete,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    border = BorderStroke(1.dp, redColor),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color.White,
+                        contentColor = redColor
+                    )
                 ) {
-
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = null
+                        contentDescription = null,
+                        tint = redColor
                     )
-
-                    Spacer(
-                        modifier = Modifier.width(8.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Delete Reminder",
+                        color = redColor,
+                        fontWeight = FontWeight.Bold
                     )
-
-                    Text("Delete Reminder")
                 }
             }
         },
-
         confirmButton = {
-
             Button(
                 onClick = {
-
-                    if (
-                        title.isNotBlank() &&
-                        date.isNotBlank()
-                    ) {
-
+                    if (title.isNotBlank()) {
                         onSave(
                             reminder.copy(
                                 title = title.trim(),
-                                dateText = date.trim()
+                                dateText = formattedDateText,
+                                timestampMillis = selectedTimeInMillis
                             )
                         )
                     }
                 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = HomeGreen
+                    containerColor = HomeGreen,
+                    contentColor = Color.White
                 )
             ) {
                 Text(
                     text = "Save Changes",
+                    fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
             }
         },
-
         dismissButton = {
-
-            TextButton(
-                onClick = onDismiss
-            ) {
-                Text("Cancel")
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = HomeGreen, fontWeight = FontWeight.Bold)
             }
         }
     )
@@ -909,7 +1093,6 @@ private fun RemindersBottomNavigation(
         )
     }
 }
-
 
 @Composable
 private fun NavigationItem(
